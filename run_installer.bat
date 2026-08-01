@@ -1,5 +1,7 @@
 @echo off
 title MamboTTS Engine Installer
+:: 强制切换到脚本所在目录，避免管理员启动时工作目录被切到 System32
+cd /d "%~dp0"
 echo ===================================================
 echo             MamboTTS Local Engine Installer
 echo ===================================================

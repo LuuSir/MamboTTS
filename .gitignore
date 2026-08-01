@@ -1,40 +1,24 @@
-# Virtual environment
-.venv/
-venv/
-ENV/
-
-# Python cache and temporary files
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.pytest_cache/
-.ipynb_checkpoints/
+.venv/
+venv/
 
-# GPT-SoVITS Engine & Weights (Large files, do not upload!)
+# GPT-SoVITS 整合包（运行时自动下载，8GB+）
 GPT-SoVITS/
-engine_temp/
 
-# Audio Data & Output (Do not upload copyright audios and large outputs!)
-training_data/
-tools/
-*.wav
-*.mp3
-*.m4a
-*.webm
-*.7z
+# 运行时产物
+engine_temp/
+7zr.exe
+config.json
+
+# 打包产物
 *.zip
 
-# Model weights (Large files >100MB ignored, but refer.wav is allowed)
-models/*.pth
-models/*.ckpt
-!models/refer.wav
-
-# IDE & Editor files
+# IDE / 编辑器
 .vscode/
 .idea/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
 *.swp
+*.swo
