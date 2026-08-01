@@ -108,7 +108,8 @@ class TTSClient:
         effective_ref_audio = ref_audio if ref_audio else self.default_ref_audio
         effective_ref_text = prompt_text if prompt_text else self.default_ref_text
         if effective_ref_audio and effective_ref_text:
-            params["ref_audio_path"] = effective_ref_audio
+            # GPT-SoVITS api.py 的 GET / 端点期望参数名为 refer_wav_path（非 ref_audio_path）
+            params["refer_wav_path"] = effective_ref_audio
             params["prompt_text"] = effective_ref_text
             params["prompt_language"] = prompt_lang
 
@@ -144,29 +145,20 @@ class TTSClient:
 
     def _mock_generate(self, text, save_path):
         """
-        Mock 模式：仅在 API 离线时生成 1 秒静音测试文件供调试。
-        注意：故意返回 success=False，避免用户误以为合成成功，
-        导致拿到静音音频后反复排查声卡/模型问题。
+        Mock 模式：API 离线时不写任何文件，仅返回失败提示。
+        注意：故意返回 success=False，避免用户误以为合成成功。
+        历史版本会写一个 1 秒静音 WAV，但用户看到「失败」后通常会重试，
+        导致目录里堆积垃圾文件。现在改为只校验写入权限，不真正写文件。
         """
-        import struct
-        import wave
-
-        try:
-            with wave.open(save_path, 'wb') as wav_file:
-                # 单声道，2字节，16000采样率
-                wav_file.setparams((1, 2, 16000, 16000, 'NONE', 'not compressed'))
-                # 写入 1 秒的静音数据
-                for _ in range(16000):
-                    data = struct.pack('<h', 0)
-                    wav_file.writeframesraw(data)
-            self._log("INFO", f"[Mock] 已生成 1 秒静音测试文件: {save_path}")
-            return False, ("本地 GPT-SoVITS 引擎未启动，无法合成配音。\n"
-                           "已生成 1 秒静音测试文件供确认链路正常。\n"
-                           "请双击 run_local_engine.bat 启动引擎后重试。")
-        except PermissionError:
-            return False, f"[Mock] 文件被占用或无写入权限：{save_path}"
-        except OSError as e:
-            return False, f"[Mock] 模拟语音生成失败：{e}\n路径：{save_path}"
+        # 仅校验目标目录是否可写，不真正生成静音文件
+        parent_dir = os.path.dirname(save_path) or "."
+        if not os.path.exists(parent_dir):
+            return False, f"输出目录不存在：{parent_dir}\n请点击「浏览...」重新选择保存路径。"
+        if not os.access(parent_dir, os.W_OK):
+            return False, f"没有写入权限的目录：{parent_dir}\n请选择其他位置，或用管理员身份运行。"
+        self._log("WARNING", f"[Mock] 引擎离线，未生成文件，目标目录可写：{parent_dir}")
+        return False, ("本地 GPT-SoVITS 引擎未启动，无法合成配音。\n"
+                       "请确认引擎已启动（运行 run_local_engine.bat 或等待自动启动）后重试。")
 
 
 if __name__ == "__main__":

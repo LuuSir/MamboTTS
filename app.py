@@ -21,7 +21,7 @@ from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from inference import TTSClient
 
 # 当前版本号，用于 GitHub 新版本检查
-CURRENT_VERSION = "v1.1.0"
+CURRENT_VERSION = "v1.2.0"
 GITHUB_REPO = "Tsukimisaka/MamboTTS"
 
 
@@ -158,16 +158,28 @@ class MamboTTSApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.tts_client = TTSClient()
-        # 默认输出路径（桌面），会被配置文件覆盖
-        self.output_file = os.path.join(os.path.expanduser("~"), "Desktop", "mambo_output.wav")
+        # 默认输出目录（桌面），会被配置文件覆盖
+        default_desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+        self.output_dir = default_desktop
+        # output_file 仅作为运行期「下次合成目标路径」使用，不再持久化完整路径
+        self.output_file = os.path.join(default_desktop, "mambo_output.wav")
 
-        # 加载持久化配置（API URL、语速、输出路径、文件命名）
+        # 加载持久化配置（API URL、语速、输出目录、文件命名）
         config = self.load_config()
         self.saved_api_url = config.get("api_url", "http://127.0.0.1:9880")
         self.saved_speed = config.get("speed", 1.0)
-        saved_output = config.get("output_file", "")
-        if saved_output:
-            self.output_file = saved_output
+
+        # 优先读取新字段 output_dir；若缺失则向后兼容旧字段 output_file（取其目录）
+        saved_dir = config.get("output_dir", "")
+        if saved_dir and os.path.isdir(saved_dir):
+            self.output_dir = saved_dir
+        elif config.get("output_file", ""):
+            legacy_dir = os.path.dirname(config.get("output_file", ""))
+            if legacy_dir and os.path.isdir(legacy_dir):
+                self.output_dir = legacy_dir
+        # 同步 output_file 到当前目录
+        self.output_file = os.path.join(self.output_dir, "mambo_output.wav")
+
         # 自定义文件命名（留空则用文案前20字），跨次启动保留
         self.saved_name = config.get("name", "")
 
@@ -195,6 +207,12 @@ class MamboTTSApp(QMainWindow):
         self._api_check_timer = QTimer(self)
         self._api_check_timer.timeout.connect(self._poll_engine_status)
         self._api_check_timer.start(2000)
+
+        # API URL 输入防抖定时器：用户停止输入 600ms 后才检查在线状态并写配置，
+        # 避免每个键击都触发 HTTP 请求 + 写盘导致输入卡顿
+        self._api_url_debounce = QTimer(self)
+        self._api_url_debounce.setSingleShot(True)
+        self._api_url_debounce.timeout.connect(self._on_api_url_debounced)
 
         self.check_api_status()
 
@@ -366,12 +384,18 @@ class MamboTTSApp(QMainWindow):
             return {}
 
     def save_config(self):
-        """把当前 GUI 状态持久化到 config.json"""
+        """把当前 GUI 状态持久化到 config.json。
+        注意：只存输出目录（output_dir），不存完整文件路径，
+        避免合成时自动生成的文件名污染用户选择的目录。
+        """
         try:
+            # 从路径输入框提取目录部分
+            current_path = self.path_input.text().strip()
+            dir_to_save = os.path.dirname(current_path) or self.output_dir
             data = {
                 "api_url": self.api_input.text().strip(),
                 "speed": self.speed_combo.currentData(),
-                "output_file": self.path_input.text().strip(),
+                "output_dir": dir_to_save,
                 "name": self.name_input.text().strip() if hasattr(self, "name_input") else "",
             }
             with open(CONFIG_PATH, "w", encoding="utf-8") as f:
@@ -736,6 +760,11 @@ class MamboTTSApp(QMainWindow):
         sb.setValue(sb.maximum())
 
     def on_api_url_changed(self):
+        """URL 输入变化时不立即检查，启动防抖定时器（600ms 无新输入才执行）"""
+        self._api_url_debounce.start(600)
+
+    def _on_api_url_debounced(self):
+        """防抖到期后：检查 API 状态并持久化配置"""
         self.check_api_status()
         self.save_config()
 
@@ -748,7 +777,9 @@ class MamboTTSApp(QMainWindow):
             self, "选择保存路径", self.output_file, "WAV Files (*.wav)"
         )
         if file_path:
+            # 用户通过浏览选择的具体文件名也作为下次合成的命名模板来源
             self.output_file = file_path
+            self.output_dir = os.path.dirname(file_path) or self.output_dir
             self.path_input.setText(file_path)
             self.save_config()
             self.append_log("INFO", f"已选择输出路径: {file_path}")
@@ -761,6 +792,13 @@ class MamboTTSApp(QMainWindow):
         # 停止 API 状态轮询
         if hasattr(self, "_api_check_timer"):
             self._api_check_timer.stop()
+        # 停止防抖定时器
+        if hasattr(self, "_api_url_debounce"):
+            self._api_url_debounce.stop()
+        # 等待合成线程结束（最多 3 秒），避免 WAV 写入不完整
+        if hasattr(self, "_worker") and self._worker is not None and self._worker.isRunning():
+            self.append_log("INFO", "等待合成线程收尾...")
+            self._worker.wait(3000)
         # 终止引擎子进程（随客户端关闭而关闭）
         # 用 taskkill /T /F 按进程树关闭，确保孙子进程 api.py 也被回收，
         # 避免 9880 端口被孤儿进程占用导致下次启动失败
@@ -860,9 +898,12 @@ class MamboTTSApp(QMainWindow):
         self.status_label.setStyleSheet("color: #f9e2af; font-weight: bold;")
 
         # 生成文件名：优先使用用户填写的「配音文件命名」，留空则用文案前20字
-        # 保留用户选择的输出目录
+        # 输出目录优先取 path_input 的目录；若为空则用 self.output_dir（用户上次选择的目录）
         current_path = self.path_input.text().strip()
-        out_dir = os.path.dirname(current_path) or os.path.join(os.path.expanduser("~"), "Desktop")
+        out_dir = os.path.dirname(current_path) or self.output_dir or os.path.join(os.path.expanduser("~"), "Desktop")
+        # 确保目录存在，目录失效时回退桌面
+        if not os.path.isdir(out_dir):
+            out_dir = os.path.join(os.path.expanduser("~"), "Desktop")
         custom_name = self.name_input.text().strip()
         if custom_name:
             # 清理非法字符并自动补充 .wav 后缀
@@ -879,7 +920,9 @@ class MamboTTSApp(QMainWindow):
         unique_path = self.get_unique_path(save_path)
         self.path_input.setText(unique_path)
         self.output_file = unique_path
-        # 路径可能已更新（自动递增后缀），同步持久化
+        # 同步目录状态，下次启动沿用此目录
+        self.output_dir = os.path.dirname(unique_path) or out_dir
+        # 持久化（save_config 只存目录，不存完整文件路径，避免文件名污染配置）
         self.save_config()
 
         speed_val = self.speed_combo.currentData()
