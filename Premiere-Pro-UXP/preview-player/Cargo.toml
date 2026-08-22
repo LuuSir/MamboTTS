@@ -1,0 +1,15 @@
+[package]
+name = "mambotts-preview"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+rodio = { version = "0.22.2", default-features = false, features = ["playback", "wav"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
