@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>MamboTTS 配音台</title>
+</head>
+<body style="margin:0;height:100vh;background:#181818;color:#e2e2e2;font:12px 'Segoe UI','Microsoft YaHei',sans-serif;overflow:hidden;display:flex;flex-direction:column;">
+  <div style="box-sizing:border-box;display:flex;align-items:center;flex:0 0 30px;padding:0 8px;border-bottom:1px solid #444;color:#58b867;font-weight:600;">
+    <span id="engineText">引擎检测中</span>
+    <span id="refreshEngine" role="button" tabindex="0" title="重新检测引擎" aria-label="重新检测引擎" style="box-sizing:border-box;display:inline-block;width:18px;height:16px;margin-left:4px;padding:0;border:0;background:transparent;color:#aaa;cursor:pointer;font:10px/16px 'Segoe UI',sans-serif;text-align:center;">[R]</span>
+    <span style="display:flex;align-items:center;min-width:0;margin-left:auto;color:#999;font-weight:400;">
+      <span style="flex:0 0 auto;">输出位置：</span>
+      <span id="outputLocation" role="button" tabindex="0" title="点击修改 WAV 输出文件夹" aria-label="点击修改 WAV 输出文件夹" style="box-sizing:border-box;display:inline-block;max-width:180px;margin-left:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#aaa;cursor:pointer;text-decoration:underline;text-underline-offset:2px;">默认位置</span>
+    </span>
+  </div>
+  <div style="display:flex;flex:1;min-height:0;width:100%;">
+    <div style="box-sizing:border-box;display:flex;flex-direction:column;width:50%;min-width:0;height:100%;border-right:1px solid #444;overflow:hidden;">
+      <div style="box-sizing:border-box;display:flex;flex-direction:column;flex:0 0 55%;min-height:0;padding:6px;border-bottom:1px solid #444;overflow:hidden;">
+        <textarea id="script" style="box-sizing:border-box;display:block;align-self:stretch;flex:1;min-width:0;min-height:0;width:calc(100% - 12px);max-width:calc(100% - 12px);margin:0 6px;padding:0;border:1px solid #555;background:#25272a;color:#eee;resize:none;font:12px 'Segoe UI','Microsoft YaHei',sans-serif;line-height:16px;" placeholder="输入配音文本"></textarea>
+        <button id="generate" type="button" style="display:block;flex:0 0 27px;min-width:106px;margin:5px auto 0;padding:0 8px;background:#4d4d4d;border:1px solid #777;color:#fff;font:12px 'Segoe UI','Microsoft YaHei',sans-serif;">加入队列并生成</button>
+      </div>
+      <div id="generationLog" data-empty="true" style="box-sizing:border-box;flex:1;min-height:0;padding:6px;color:#999;overflow-y:auto;overflow-x:hidden;line-height:16px;">暂无生成记录</div>
+    </div>
+    <div style="display:flex;flex-direction:column;width:50%;min-width:0;height:100%;overflow:hidden;">
+      <div style="box-sizing:border-box;flex:0 0 70%;min-height:0;border-bottom:1px solid #444;overflow-y:auto;overflow-x:hidden;">
+        <div id="resultList"></div>
+        <div id="emptyResults" style="padding:6px;color:#999;">暂无配音</div>
+      </div>
+      <div id="insertLog" data-empty="true" style="box-sizing:border-box;flex:1;min-height:0;padding:6px;color:#999;overflow-y:auto;overflow-x:hidden;line-height:16px;">暂无插入记录</div>
+    </div>
+  </div>
+  <script src="index.js"></script>
+</body>
+</html>

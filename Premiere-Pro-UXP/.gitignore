@@ -1,0 +1,35 @@
+# Dependencies and build output
+node_modules/
+dist/
+build/
+preview-player/target/
+*.ccx
+*.xdx
+*.zip
+
+# Local tooling
+work/
+.vscode/
+.idea/
+.uxp/
+*.code-workspace
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# Generated media and local settings
+output/
+*.wav
+*.mp3
+settings.json
+debug.log
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
