@@ -60,4 +60,15 @@ MamboTTS 是一款专为视频创作者（如 B站/抖音小UP主）打造的 **
 ## 🤝 贡献与感谢
 
 *   感谢大模型底座开源项目 [RVC-Boss/GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS)。
+*   感谢 [@2710165659](https://github.com/2710165659) 贡献的 Premiere Pro UXP 插件支持。
 *   如果您觉得好用，欢迎点一个 Star 🌟 支持作者！
+
+---
+
+## 📄 开源协议 (License)
+
+本项目采用 [MIT License](LICENSE) 协议开源。
+
+**简要说明：**
+你可以自由地使用、修改和分发本项目的代码（包括商业用途），但**唯一的限制与义务**是：在复用或修改后的代码中，**必须保留原作者的版权声明（署名 `Tsukimisaka`）与许可声明**。
+

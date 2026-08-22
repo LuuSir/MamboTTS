@@ -701,7 +701,7 @@ async function findImportedClip(root, filePath) {
 async function getMamboFolder(project) {
   const premiere = getPremiereApi();
   const root = await project.getRootItem();
-  const folderNames = ["Mambo TSS", "Mambo TTS"];
+  const folderNames = ["Mambo TTS", "Mambo TTS"];
   const items = await root.getItems();
   for (let index = 0; index < items.length; index += 1) {
     const projectItem = items[index];
@@ -716,9 +716,9 @@ async function getMamboFolder(project) {
     created = project.executeTransaction(function (compoundAction) {
       compoundAction.addAction(root.createBinAction(folderNames[0], false));
       return true;
-    }, "创建 Mambo TSS 文件夹");
+    }, "创建 Mambo TTS 文件夹");
   });
-  if (created === false) throw new Error("无法创建 Mambo TSS 文件夹");
+  if (created === false) throw new Error("无法创建 Mambo TTS 文件夹");
 
   const refreshedItems = await root.getItems();
   for (let index = 0; index < refreshedItems.length; index += 1) {
@@ -727,7 +727,7 @@ async function getMamboFolder(project) {
       return premiere.FolderItem.cast(projectItem);
     }
   }
-  throw new Error("Mambo TSS 文件夹创建后无法定位");
+  throw new Error("Mambo TTS 文件夹创建后无法定位");
 }
 
 function asProjectItem(projectItem) {
