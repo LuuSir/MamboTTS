@@ -75,12 +75,6 @@
 首次加载约需 10–30 秒属正常。若超时，界面提供「重启引擎」入口，并可在运行日志中查看具体原因。
 </details>
 
-<details>
-<summary>AMD 显卡 / Mac 能用吗？</summary>
-
-一键包基于 Windows + NVIDIA CUDA，暂不支持其他平台。可参照上游 GPT-SoVITS 自行部署后，在主界面「引擎接口」填写自建服务地址。
-</details>
-
 ## 工作原理
 
 MamboTTS 是 GPT-SoVITS 的 Windows 图形客户端与启动器。本仓库**不包含、也不修改** GPT-SoVITS 本体：引擎整合包在首次运行时从云端下载，客户端通过本地 HTTP API（`127.0.0.1:9880`）调用，接口契约见 `engine_contract.py`。
