@@ -145,4 +145,3 @@
 ## 许可
 
 本项目采用 MIT 许可，详见 [LICENSE](LICENSE)。
-感谢 @2710165659 贡献的 Premiere Pro UXP 插件支持。
