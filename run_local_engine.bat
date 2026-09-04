@@ -32,6 +32,7 @@ echo [STATUS] Activating virtual environment...
 call .venv\Scripts\activate.bat
 
 echo [STATUS] Starting Local GPU Voice Engine via Python...
-python run_engine.py
+:: 显式走 venv 解释器，不依赖 activate 改 PATH
+.venv\Scripts\python.exe run_engine.py
 
 pause

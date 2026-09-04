@@ -22,3 +22,9 @@ config.json
 .idea/
 *.swp
 *.swo
+
+# 启动错误日志 / 临时产物
+launcher_error.log
+*.log
+history.json
+wheelhouse/

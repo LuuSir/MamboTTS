@@ -33,25 +33,23 @@ if not exist .venv (
     )
 )
 
-echo [STATUS] Activating virtual environment...
-call .venv\Scripts\activate.bat
-
-:: 检测依赖是否已安装（PySide6 / requests），已装则跳过安装，避免每次启动都耗时
+:: 直接固定使用 venv 解释器执行安装与运行（旧版依赖 activate 改 PATH，
+:: 在部分环境下 pip/python 会解析到全局解释器，把包装到系统里且导致版本漂移）
 .venv\Scripts\python.exe -c "import PySide6, requests" >nul 2>&1
 if errorlevel 1 (
     echo [STATUS] Installing dependencies PySide6 and requests...
     echo [STATUS] This may take 10-30 seconds. Please wait...
-    pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
+    .venv\Scripts\python.exe -m pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
     if errorlevel 1 (
         echo [WARNING] Retrying install without mirror...
-        pip install -r requirements.txt
+        .venv\Scripts\python.exe -m pip install -r requirements.txt
     )
 ) else (
     echo [STATUS] Dependencies already installed, skipping installation.
 )
 
 echo [STATUS] Starting MamboTTS...
-python app.py
+.venv\Scripts\python.exe app.py
 
 if errorlevel 1 (
     echo.

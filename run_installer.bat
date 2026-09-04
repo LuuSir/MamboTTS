@@ -38,13 +38,14 @@ call .venv\Scripts\activate.bat
 
 echo [STATUS] Installing required dependencies (PySide6, requests)...
 echo [STATUS] This may take 10-30 seconds. Please wait...
-pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
+:: 显式走 venv python -m pip，不依赖 activate 改 PATH
+.venv\Scripts\python.exe -m pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 if errorlevel 1 (
     echo [WARNING] Dependency installation failed! Retrying without mirror...
-    pip install -r requirements.txt
+    .venv\Scripts\python.exe -m pip install -r requirements.txt
 )
 
 echo [STATUS] Launching installer script...
-python install_engine.py
+.venv\Scripts\python.exe install_engine.py
 
 pause
