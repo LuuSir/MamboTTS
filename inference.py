@@ -1,6 +1,9 @@
 import os
+import io
 import logging
+import re
 import requests
+import wave
 
 from engine_contract import (
     SUPPORTED_LANGS, DEFAULT_REF_TEXT, CUT_PUNC, DEFAULT_API_URL, REF_WAV,
@@ -42,6 +45,66 @@ def _looks_like_wav(data: bytes) -> bool:
         pos += 8 + chunk_size + (chunk_size & 1)
     # 8KB 内没找到 data 块：可疑（正常 WAV 不会这样）
     return False
+
+
+def split_pause_text(text):
+    """Split half-width and full-width spaces into one-second pause events."""
+    events = []
+    for part in re.split(r"([ \u3000]+)", text):
+        if not part:
+            continue
+        if part[0] in " \u3000":
+            events.append(("pause", len(part)))
+        else:
+            events.append(("speech", part))
+    return events
+
+
+def make_silent_wav(seconds, sample_rate=32000, channels=1, sample_width=2):
+    """Create a PCM WAV containing the requested duration of silence."""
+    output = io.BytesIO()
+    with wave.open(output, "wb") as wav_file:
+        wav_file.setnchannels(channels)
+        wav_file.setsampwidth(sample_width)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(b"\x00" * int(seconds * sample_rate * channels * sample_width))
+    return output.getvalue()
+
+
+def combine_wav_segments(segments):
+    """Combine speech WAV bytes and pause durations into one PCM WAV."""
+    def format_params(params):
+        return (params.nchannels, params.sampwidth, params.framerate,
+                params.comptype, params.compname)
+
+    speech_segments = [segment for segment in segments if segment[0] == "speech"]
+    if not speech_segments:
+        pause_seconds = sum(value for event_type, value in segments if event_type == "pause")
+        return make_silent_wav(pause_seconds)
+
+    with wave.open(io.BytesIO(speech_segments[0][1]), "rb") as first_wav:
+        reference_params = first_wav.getparams()
+    if reference_params.comptype != "NONE":
+        raise ValueError("API 返回的音频不是未压缩 PCM WAV")
+
+    output = io.BytesIO()
+    with wave.open(output, "wb") as output_wav:
+        output_wav.setparams(reference_params)
+        for event_type, value in segments:
+            if event_type == "pause":
+                frame_count = int(value * reference_params.framerate)
+                output_wav.writeframes(
+                    b"\x00" * frame_count * reference_params.nchannels * reference_params.sampwidth
+                )
+                continue
+            with wave.open(io.BytesIO(value), "rb") as input_wav:
+                params = input_wav.getparams()
+                if params.comptype != "NONE":
+                    raise ValueError("API 返回的音频不是未压缩 PCM WAV")
+                if format_params(params) != format_params(reference_params):
+                    raise ValueError("API 返回的语音片段音频格式不一致")
+                output_wav.writeframes(input_wav.readframes(input_wav.getnframes()))
+    return output.getvalue()
 
 
 class TTSClient:
@@ -127,6 +190,16 @@ class TTSClient:
         if err:
             return False, err
 
+        events = split_pause_text(text)
+        if not any(event_type == "speech" for event_type, _ in events):
+            try:
+                with open(save_path, "wb") as output_file:
+                    output_file.write(combine_wav_segments(events))
+                self._log("INFO", f"纯静音音频合成成功，已保存至: {save_path}")
+                return True, f"语音合成成功，已保存至: {save_path}"
+            except (OSError, ValueError) as exc:
+                return False, f"保存静音音频失败：{exc}"
+
         base_url = (api_url or self.api_url).rstrip("/")
         online = self.is_api_running(api_url=base_url)
         if not online:
@@ -147,74 +220,61 @@ class TTSClient:
             return False, f"不支持的参考音频语种: {prompt_lang}\n支持的语种: zh/en/ja/ko/yue 等"
 
         try:
-            speed = float(speed)
-        except (TypeError, ValueError):
-            speed = 1.0
+            try:
+                speed = float(speed)
+            except (TypeError, ValueError):
+                speed = 1.0
 
-        # GPT-SoVITS api.py 字段名（旧版）: refer_wav_path / prompt_language /
-        # text_language / speed / cut_punc
-        # cut_punc: 按标点切分长文本，绕过单次合成长度限制（约208字）
-        params = {
-            "text": text,
-            "text_language": text_lang,
-            "speed": speed,
-            "cut_punc": CUT_PUNC,
-        }
+            effective_ref_audio = ref_audio if ref_audio else self.default_ref_audio
+            effective_ref_text = prompt_text if prompt_text else self.default_ref_text
+            speech_segments = []
+            read_timeout = min(600.0, max(120.0, len(text) * 1.0))
 
-        # 参考音频：优先用调用方传入的，否则用默认 refer.wav
-        effective_ref_audio = ref_audio if ref_audio else self.default_ref_audio
-        effective_ref_text = prompt_text if prompt_text else self.default_ref_text
-        if effective_ref_audio and effective_ref_text:
-            params["refer_wav_path"] = effective_ref_audio
-            params["prompt_text"] = effective_ref_text
-            params["prompt_language"] = prompt_lang
+            for event_type, event_value in events:
+                if event_type == "pause":
+                    speech_segments.append((event_type, event_value))
+                    continue
 
-        # 读超长按文本量伸缩：约每字 1 秒，下限 120s，上限 600s。
-        # 长文案在消费级 GPU 上合成远超 60 秒，固定超时必然误报。
-        read_timeout = min(600.0, max(120.0, len(text) * 1.0))
+                params = {
+                    "text": event_value,
+                    "text_language": text_lang,
+                    "speed": speed,
+                    "cut_punc": CUT_PUNC,
+                }
+                if effective_ref_audio and effective_ref_text:
+                    params["refer_wav_path"] = effective_ref_audio
+                    params["prompt_text"] = effective_ref_text
+                    params["prompt_language"] = prompt_lang
 
-        try:
-            self._log("INFO", f"正在请求 GPT-SoVITS API 合成文本: {text[:20]}...")
-            # POST / + JSON body：与 GET 字段完全一致（见 api.py tts_endpoint）。
-            # 不用 GET 是避免长文案 URL 编码后超长（h11 行上限 16KB，
-            # 约 600 个汉字即触发 414/400）。
-            # proxies=None 强制直连：本机代理工具（Clash/ghost 等）会劫持
-            # 127.0.0.1 流量并在长合成期间掐断连接（ChunkedEncodingError）。
-            # stream=True + iter_content 边下边写：几十 MB 的 WAV 不必整体进内存
-            with requests.post(f"{base_url}/", json=params, stream=True,
-                               timeout=(10, read_timeout),
-                               proxies={"http": None, "https": None}) as response:
-                if response.status_code == 200:
-                    try:
-                        with open(save_path, "wb") as f:
-                            for chunk in response.iter_content(chunk_size=1024 * 256):
-                                if chunk:
-                                    f.write(chunk)
-                    except PermissionError:
-                        return False, f"文件被占用或无写入权限：{save_path}\n请关闭正在使用该文件的程序后重试。"
-                    except OSError as e:
-                        return False, f"保存文件失败：{e}\n路径：{save_path}"
-                    # 写完再校验 WAV 结构：流式模式下无法提前看 content
-                    try:
-                        with open(save_path, "rb") as f:
-                            head = f.read(8192)
-                    except OSError:
-                        head = b""
-                    if not _looks_like_wav(head):
-                        snippet = f"(文件大小 {os.path.getsize(save_path)} 字节)"
-                        self._log("ERROR", f"API 返回 200 但内容不是有效 WAV：{snippet}")
-                        try:
-                            os.remove(save_path)  # 别留坏文件
-                        except OSError:
-                            pass
+                self._log("INFO", f"正在请求 GPT-SoVITS API 合成文本: {event_value[:20]}...")
+                with requests.post(f"{base_url}/", json=params, stream=True,
+                                   timeout=(10, read_timeout),
+                                   proxies={"http": None, "https": None}) as response:
+                    if response.status_code != 200:
+                        err_body = response.text[:300] if response.text else "(无响应内容)"
+                        self._log("ERROR", f"API 响应失败，状态码: {response.status_code}, 内容: {err_body}")
+                        return False, f"API 返回错误（状态码 {response.status_code}）：\n{err_body}"
+
+                    audio_buffer = io.BytesIO()
+                    for chunk in response.iter_content(chunk_size=1024 * 256):
+                        if chunk:
+                            audio_buffer.write(chunk)
+                    audio_bytes = audio_buffer.getvalue()
+                    if not _looks_like_wav(audio_bytes[:8192]):
+                        self._log("ERROR", "API 返回 200 但内容不是有效 WAV")
                         return False, "引擎返回了无效音频数据（状态码 200）。\n请查看引擎日志排查模型/参考音频配置。"
-                    self._log("INFO", f"语音合成成功，已保存至: {save_path}")
-                    return True, f"语音合成成功，已保存至: {save_path}"
-                else:
-                    # 把后端返回的错误体也带给用户，便于排查
-                    err_body = response.text[:300] if response.text else "(无响应内容)"
-                    self._log("ERROR", f"API 响应失败，状态码: {response.status_code}, 内容: {err_body}")
-                    return False, f"API 返回错误（状态码 {response.status_code}）：\n{err_body}"
+                    speech_segments.append((event_type, audio_bytes))
+
+            combined_wav = combine_wav_segments(speech_segments)
+            try:
+                with open(save_path, "wb") as output_file:
+                    output_file.write(combined_wav)
+            except PermissionError:
+                return False, f"文件被占用或无写入权限：{save_path}\n请关闭正在使用该文件的程序后重试。"
+            except OSError as exc:
+                return False, f"保存文件失败：{exc}\n路径：{save_path}"
+            self._log("INFO", f"语音合成成功，已保存至: {save_path}")
+            return True, f"语音合成成功，已保存至: {save_path}"
 
         # 注：ChunkedEncodingError 与 ConnectionError 是 RequestException 的并列子类，
         # 并非继承关系，先捕获哪个都不影响可达性；放前面只为可读性。
