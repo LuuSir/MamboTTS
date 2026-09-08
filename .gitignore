@@ -8,7 +8,8 @@ venv/
 
 # GPT-SoVITS 整合包（运行时自动下载，8GB+）
 GPT-SoVITS/
-
+*.pth
+*.ckpt
 # 运行时产物
 engine_temp/
 7zr.exe
