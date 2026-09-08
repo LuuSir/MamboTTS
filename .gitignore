@@ -28,3 +28,7 @@ launcher_error.log
 *.log
 history.json
 wheelhouse/
+
+# 下载的model
+models/manbo_e8_s168.pth
+models/manbo-e10.ckpt
