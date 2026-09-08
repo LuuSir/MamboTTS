@@ -1095,8 +1095,8 @@ class MamboTTSApp(QMainWindow):
             self.progress_bar.setFormat("%p%")
 
     def generate_voice(self):
-        text = self.text_input.toPlainText().strip()
-        if not text:
+        text = self.text_input.toPlainText()
+        if not text.strip():
             self._set_action_status("error", "✕ 请输入配音文案")
             return
 

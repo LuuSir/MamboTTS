@@ -15,6 +15,10 @@ engine_temp/
 7zr.exe
 config.json
 
+# 本地音色模型（GitHub 单文件/LFS 上传限制）
+models/manbo_e8_s168.pth
+models/manbo-e10.ckpt
+
 # 打包产物
 *.zip
 
